@@ -28,6 +28,7 @@ if __name__=="__main__":
     parser.add_argument('--eval_episode', type=int, default=2000)
     parser.add_argument('--verbose', type=bool, default=True)
     parser.add_argument('--visualize', type=bool, default=True)
+    parser.add_argument('--export_dir', type=str, default=None)
     args = parser.parse_args()
 
     checkpoint_path = args.ckpt_path
@@ -35,9 +36,9 @@ if __name__=="__main__":
     verbose = args.verbose
 
     if args.visualize:
-        raw_env = CarParking(fps=100, verbose=verbose)
+        raw_env = CarParking(fps=100, verbose=verbose, export_data_path=args.export_dir)
     else:
-        raw_env = CarParking(fps=100, verbose=verbose, render_mode='rgb_array')
+        raw_env = CarParking(fps=100, verbose=verbose, render_mode='rgb_array', export_data_path=args.export_dir)
     env = CarParkingWrapper(raw_env)
 
     relative_path = '.'

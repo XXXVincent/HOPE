@@ -9,6 +9,8 @@ from typing import Optional, Union
 import math
 from typing import OrderedDict
 import random
+import json
+import cv2
 
 import numpy as np
 import gym
@@ -35,6 +37,7 @@ import env.reeds_shepp as rsCurve
 from env.observation_processor import Obs_Processor
 from model.action_mask import ActionMask
 from configs import *
+import uuid
 
 class CarParking(gym.Env):
 
@@ -53,6 +56,7 @@ class CarParking(gym.Env):
         use_lidar_observation: bool =USE_LIDAR,
         use_img_observation: bool=USE_IMG,
         use_action_mask: bool=USE_ACTION_MASK,
+        export_data_path=None
     ):
         super().__init__()
 
@@ -80,6 +84,7 @@ class CarParking(gym.Env):
         self.reward = 0.0
         self.prev_reward = 0.0
         self.accum_arrive_reward = 0.0
+        self.map_case_id = 'default'
 
         self.action_space = spaces.Box(
             np.array([VALID_STEER[0], VALID_SPEED[0]]).astype(np.float32),
@@ -113,7 +118,22 @@ class CarParking(gym.Env):
         self.observation_space['target'] = spaces.Box(
             low=low_bound, high=high_bound, shape=(self.tgt_repr_size,), dtype=np.float64
         )
-    
+        self.export_data_path = export_data_path
+            
+    def setup_export_dir(self):
+        self.case_dir = os.path.join(self.export_data_path, 'case_'+str(self.map_case_id).zfill(4))
+        os.makedirs(self.case_dir, exist_ok=True)
+        self.trail_dir = os.path.join(self.case_dir, uuid.uuid4().hex)
+        os.makedirs(self.trail_dir, exist_ok=True)
+        
+        self.export_bev_img_path = os.path.join(self.trail_dir, 'imgs')
+        self.export_lidar_path = os.path.join(self.trail_dir, 'lidar')
+        self.export_status_path = os.path.join(self.trail_dir, 'status')
+        
+        os.makedirs(self.export_bev_img_path, exist_ok=True)
+        os.makedirs(self.export_lidar_path, exist_ok=True)
+        os.makedirs(self.export_status_path, exist_ok=True)
+        
     def set_level(self, level:str=None):
         if level is None:
             self.map = ParkingMapNormal()
@@ -133,8 +153,11 @@ class CarParking(gym.Env):
         if level is not None:
             self.set_level(level)
         initial_state = self.map.reset(case_id, data_dir)
+        self.map_case_id = case_id
         self.vehicle.reset(initial_state)
         self.matrix = self.coord_transform_matrix()
+        if self.export_data_path is not None:
+            self.setup_export_dir()        
         return self.step()[0]
 
     def coord_transform_matrix(self) -> list:
@@ -252,6 +275,7 @@ class CarParking(gym.Env):
         `info` (`OrderedDict`): other information.
         '''
         assert self.vehicle is not None
+            
         prev_state = self.vehicle.state
         collide = False
         arrive = False
@@ -275,6 +299,8 @@ class CarParking(gym.Env):
                 del self.vehicle.trajectory[-simu_step_num:-1]
 
         self.t += 1
+        if self.export_data_path is not None:
+            self.export_status_data()        
         observation = self.render(self.render_mode)
         if arrive:
             status = Status.ARRIVED
@@ -298,6 +324,20 @@ class CarParking(gym.Env):
 
         return observation, reward_info, status, info
 
+    def export_status_data(self,):
+        ego_status = [self.vehicle.state.loc.x, self.vehicle.state.loc.y, self.vehicle.state.heading]
+        target_status = [self.map.dest.loc.x, self.map.dest.loc.y, self.map.dest.heading]
+        
+        with open(os.path.join(self.export_status_path, str(int(self.t)).zfill(4)+'.json'), 'w') as f:
+            json.dump({'ego':ego_status, 'target':target_status}, f)
+           
+    def export_env_data(self, raw_observation, lidar):
+        img_save_path = os.path.join(self.export_bev_img_path, str(int(self.t)).zfill(4)+'.jpg')
+        cv2.imwrite(img_save_path, raw_observation)
+        
+        lidar_savepath = os.path.join(self.export_lidar_path, str(int(self.t)).zfill(4)+'.npy')
+        np.save(lidar_savepath, lidar)
+                        
     def _render(self, surface: pygame.Surface):
         surface.fill(BG_COLOR)
         for obstacle in self.map.obstacles:
@@ -369,9 +409,9 @@ class CarParking(gym.Env):
         lidar_view = self.lidar.get_observation(self.vehicle.state, obs_list)
         return lidar_view
     
-    def _get_targt_repr(self,):
+    def _get_targt_repr(self,export_pose_path=None):
         # target position representation
-        dest_pos = (self.map.dest.loc.x, self.map.dest.loc.y, self.map.dest.heading)
+        dest_pos = (self.map.dest.loc.x, self.map.dest.loc.y, self.map.dest.heading) # TODO export POSE here
         ego_pos = (self.vehicle.state.loc.x, self.vehicle.state.loc.y, self.vehicle.state.heading)
         rel_distance = math.sqrt((dest_pos[0]-ego_pos[0])**2 + (dest_pos[1]-ego_pos[1])**2)
         rel_angle = math.atan2(dest_pos[1]-ego_pos[1], dest_pos[0]-ego_pos[0]) - ego_pos[2]
@@ -380,7 +420,7 @@ class CarParking(gym.Env):
             math.cos(rel_dest_heading), math.cos(rel_dest_heading)])
         return tgt_repr 
 
-    def render(self, mode: str = "human"):
+    def render(self, mode: str = "human", export_obs_path=None):
         assert mode in self.metadata["render_mode"]
         assert self.vehicle is not None
 
@@ -398,13 +438,15 @@ class CarParking(gym.Env):
         self._render(self.screen)
         observation = {'img':None, 'lidar':None, 'target':None, 'action_mask':None}
         if self.use_img_observation:
-            raw_observation = self._get_img_observation(self.screen)
+            raw_observation = self._get_img_observation(self.screen) # TODO save observation here?
             observation['img'] = self._process_img_observation(raw_observation)
         if self.use_lidar_observation:
             observation['lidar'] = self._get_lidar_observation()
         if self.use_action_mask:
             observation['action_mask'] = self.action_filter.get_steps(observation['lidar'])
         observation['target'] = self._get_targt_repr()
+        if self.export_data_path is not None:
+            self.export_env_data(raw_observation, observation['lidar'])
         pygame.display.update()
         self.clock.tick(self.fps)
         
