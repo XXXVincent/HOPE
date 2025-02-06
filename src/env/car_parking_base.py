@@ -353,8 +353,8 @@ class CarParking(gym.Env):
             pygame.draw.polygon(
                 surface, OBSTACLE_COLOR, self._coord_transform(obstacle.shape))
 
-        pygame.draw.polygon(
-            surface, START_COLOR, self._coord_transform(self.map.start_box), width=1)
+        # pygame.draw.polygon(
+        #     surface, START_COLOR, self._coord_transform(self.map.start_box), width=1)
         pygame.draw.polygon(
             surface, DEST_COLOR, self._coord_transform(self.map.dest_box))
         
