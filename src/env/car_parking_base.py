@@ -127,10 +127,12 @@ class CarParking(gym.Env):
         os.makedirs(self.trail_dir, exist_ok=True)
         
         self.export_bev_img_path = os.path.join(self.trail_dir, 'imgs')
+        self.export_map_path = os.path.join(self.trail_dir, 'maps')
         self.export_lidar_path = os.path.join(self.trail_dir, 'lidar')
         self.export_status_path = os.path.join(self.trail_dir, 'status')
         
         os.makedirs(self.export_bev_img_path, exist_ok=True)
+        os.makedirs(self.export_map_path, exist_ok=True)
         os.makedirs(self.export_lidar_path, exist_ok=True)
         os.makedirs(self.export_status_path, exist_ok=True)
         
@@ -332,6 +334,13 @@ class CarParking(gym.Env):
             json.dump({'ego':ego_status, 'target':target_status}, f)
            
     def export_env_data(self, raw_observation, lidar):
+        
+        map_raw = pygame.image.tostring(self.screen, "RGB")
+        map_raw = np.frombuffer(map_raw, dtype=np.uint8)
+        map_raw = map_raw.reshape((WIN_W, WIN_H,3))        
+        map_save_path = os.path.join(self.export_map_path, str(int(self.t)).zfill(4)+'.jpg')
+        cv2.imwrite(map_save_path, map_raw)
+        
         img_save_path = os.path.join(self.export_bev_img_path, str(int(self.t)).zfill(4)+'.jpg')
         cv2.imwrite(img_save_path, raw_observation)
         
@@ -436,6 +445,7 @@ class CarParking(gym.Env):
             self.clock = pygame.time.Clock()
 
         self._render(self.screen)
+        
         observation = {'img':None, 'lidar':None, 'target':None, 'action_mask':None}
         if self.use_img_observation:
             raw_observation = self._get_img_observation(self.screen) # TODO save observation here?

@@ -102,7 +102,7 @@ USE_ACTION_MASK = True
 MAX_DIST_TO_DEST = 20
 K = 12 # the render scale
 RS_MAX_DIST = 10
-RENDER_TRAJ = True
+RENDER_TRAJ = False
 
 # action mask
 PRECISION = 10

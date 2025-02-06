@@ -11,6 +11,8 @@ __pycache__
 *.pyc
 
 # vscode
-.vscode
+# .vscode
 *.code-workspace
 .VSCodeCounter
+
+data_export
