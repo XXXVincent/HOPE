@@ -327,8 +327,15 @@ class CarParking(gym.Env):
         return observation, reward_info, status, info
 
     def export_status_data(self,):
-        ego_status = [self.vehicle.state.loc.x, self.vehicle.state.loc.y, self.vehicle.state.heading]
-        target_status = [self.map.dest.loc.x, self.map.dest.loc.y, self.map.dest.heading]
+        # ego_status = [self.vehicle.state.loc.x, self.vehicle.state.loc.y, self.vehicle.state.heading]
+        k = self.matrix[0]
+        bx = self.matrix[-2]
+        by = self.matrix[-1]
+        ego_x_world = k*self.vehicle.state.loc.x + bx
+        ego_y_world = k*self.vehicle.state.loc.y + by
+        ego_status = [ego_x_world, ego_y_world, self.vehicle.state.heading]
+
+        target_status = [self.map.dest.loc.x*k+bx, self.map.dest.loc.y*k+by, self.map.dest.heading]
         
         with open(os.path.join(self.export_status_path, str(int(self.t)).zfill(4)+'.json'), 'w') as f:
             json.dump({'ego':ego_status, 'target':target_status}, f)
